@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chaturbate Lovense Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 620px;
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 16px;
+    }
+    h1 { font-size: 15px; font-weight: 700; color: #ff6b9d; margin-bottom: 4px; letter-spacing: 0.5px; }
+    .subtitle { font-size: 11px; color: #888; margin-bottom: 16px; }
+
+    .active-tip {
+      background: #16213e;
+      border: 1px solid #ff6b9d44;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      min-height: 64px;
+    }
+    .active-tip h2, .section h2 {
+      font-size: 12px; font-weight: 600; color: #a0c4ff;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+    }
+    .tip-idle { font-size: 12px; color: #555; font-style: italic; }
+    .tip-details { display: flex; gap: 12px; margin-bottom: 8px; align-items: baseline; }
+    .tip-stat { display: flex; flex-direction: column; align-items: center; }
+    .tip-stat .value { font-size: 22px; font-weight: 700; color: #ff6b9d; line-height: 1; }
+    .tip-stat .label { font-size: 10px; color: #888; margin-top: 2px; }
+    .tip-separator { color: #333; font-size: 18px; align-self: center; }
+    .tip-pattern { font-size: 11px; color: #a0c4ff; margin-bottom: 6px; font-style: italic; }
+    .progress-bar-wrap { background: #0f3460; border-radius: 4px; height: 6px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #ff6b9d, #a0c4ff); border-radius: 4px; transition: width 0.9s linear; }
+    .progress-label { font-size: 10px; color: #666; text-align: right; margin-top: 3px; }
+
+    .section { background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    .field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .field-row label { font-size: 12px; color: #aaa; min-width: 70px; }
+    input[type="text"], input[type="number"] {
+      flex: 1; background: #0f3460; border: 1px solid #2a4a7f;
+      border-radius: 4px; color: #fff; padding: 5px 8px; font-size: 12px; outline: none;
+    }
+    input:focus { border-color: #ff6b9d; }
+    select {
+      flex: 1; background: #0f3460; border: 1px solid #2a4a7f;
+      border-radius: 4px; color: #fff; padding: 5px 8px; font-size: 12px; outline: none;
+    }
+    td select { width: 100%; padding: 3px 4px; font-size: 11px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { color: #888; font-weight: 600; text-align: left; padding: 4px 3px 6px; border-bottom: 1px solid #2a4a7f; }
+    td { padding: 3px; }
+    td input, td select { width: 100%; padding: 3px 4px; font-size: 11px; }
+
+    .row-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+    button { cursor: pointer; border: none; border-radius: 4px; font-size: 12px; padding: 6px 12px; transition: opacity 0.2s; }
+    button:hover { opacity: 0.85; }
+    .btn-add { background: #0f3460; color: #a0c4ff; border: 1px solid #2a4a7f; }
+    .btn-remove { background: transparent; color: #ff6b9d; border: 1px solid #ff6b9d; padding: 3px 7px; font-size: 11px; }
+    .btn-save { width: 100%; background: #ff6b9d; color: #fff; font-weight: 700; font-size: 13px; padding: 9px; border-radius: 6px; margin-top: 4px; }
+    .btn-test { width: 100%; background: #0f3460; color: #a0c4ff; border: 1px solid #2a4a7f; font-size: 12px; padding: 7px; border-radius: 6px; margin-bottom: 8px; }
+    .btn-pause { width: 100%; font-size: 14px; font-weight: 700; padding: 10px; border-radius: 6px; margin-bottom: 10px; background: #e67e22; color: #fff; border: none; }
+    .btn-pause.paused { background: #27ae60; }
+
+    .queue-info { font-size: 11px; color: #aaa; text-align: center; margin-bottom: 8px; min-height: 14px; }
+    .queue-info span { color: #ff6b9d; font-weight: 700; }
+    .status { font-size: 11px; text-align: center; margin-top: 8px; min-height: 16px; color: #4caf50; }
+    .status.error { color: #ff6b9d; }
+    .tip-info { font-size: 10px; color: #666; margin-top: 4px; }
+
+    /* Badge commande spéciale */
+    .special-badge { display: inline-block; background: #ff6b9d22; color: #ff6b9d; border: 1px solid #ff6b9d44; border-radius: 3px; padding: 1px 5px; font-size: 10px; margin-left: 4px; }
+
+    /* Checkbox random */
+    .rand-wrap { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #aaa; }
+    .rand-wrap input[type="checkbox"] { width: auto; flex: none; }
+
+    /* Largeurs fixes pour la table commandes spéciales */
+    #specialBody td:nth-child(1), #specialBody th:nth-child(1) { width: 65px; }
+    #specialBody td:nth-child(2), #specialBody th:nth-child(2) { width: 110px; }
+    #specialBody td:nth-child(3), #specialBody th:nth-child(3) { width: 110px; }
+    #specialBody td:nth-child(4), #specialBody th:nth-child(4) { width: 110px; }
+    #specialBody td:nth-child(5), #specialBody th:nth-child(5) { width: 55px; }
+
+    /* Inputs côte à côte dans Strength et Durée */
+    .dual-input { display: flex; gap: 3px; align-items: center; }
+    .dual-input input { width: 48px !important; flex: none; padding: 3px 4px; }
+    .dual-input span { color: #555; font-size: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>🎮 Chaturbate × Lovense Bridge</h1>
+  <div class="subtitle">Connects Chaturbate tips to your Lovense toy</div>
+
+  <div class="active-tip">
+    <h2>⚡ Active tip</h2>
+    <div id="tipDisplay" class="tip-idle">No active tip</div>
+  </div>
+
+  <button class="btn-pause" id="btnPause">⏸ Pause</button>
+  <div class="queue-info" id="queueInfo"></div>
+
+  <div class="section">
+    <h2>📡 Lovense Remote Connection</h2>
+    <div class="field-row">
+      <label>Local IP</label>
+      <input type="text" id="lovenseIP" placeholder="e.g. 192.168.1.42" />
+    </div>
+    <div class="field-row">
+      <label>Port</label>
+      <input type="number" id="lovensePort" placeholder="e.g. 20010" />
+    </div>
+    <div class="tip-info">💡 Find this info in Lovense Remote → Discover → Game Mode</div>
+  </div>
+
+  <button class="btn-test" id="btnTest">⚡ Test connection (2s vibration)</button>
+
+  <!-- Commandes spéciales -->
+  <div class="section">
+    <h2>🌟 Special Commands</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Tokens</th>
+          <th>Pattern</th>
+          <th>Strength</th>
+          <th>Duration (s)</th>
+          <th>Rand.</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="specialBody"></tbody>
+    </table>
+    <div class="row-actions">
+      <button class="btn-add" id="btnAddSpecial">+ Add</button>
+    </div>
+    <div class="tip-info" style="margin-top:6px">💡 Rand. durée : min–max en secondes. Rand. force : min–max sur 1-20.</div>
+  </div>
+
+  <!-- Mapping standard -->
+  <div class="section">
+    <h2>🎚️ Standard Token → Vibration Mapping</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Min</th>
+          <th>Max</th>
+          <th>Strength</th>
+          <th>Duration (s)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="mappingBody"></tbody>
+    </table>
+    <div class="row-actions">
+      <button class="btn-add" id="btnAddRow">+ Add</button>
+    </div>
+  </div>
+
+  <button class="btn-save" id="btnSave">💾 Save</button>
+  <div class="status" id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

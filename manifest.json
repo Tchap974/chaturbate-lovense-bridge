@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Chaturbate Lovense Bridge",
+  "version": "1.0",
+  "description": "Relays Chaturbate tips to your Lovense toy via Lovense Remote Game Mode",
+
+  "permissions": [
+    "storage"
+  ],
+
+  "host_permissions": [
+    "https://*.chaturbate.com/*",
+    "http://*/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["https://*.chaturbate.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Chaturbate Lovense Bridge"
+  }
+}
