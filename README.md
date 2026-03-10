@@ -103,6 +103,14 @@ Tips are processed **in order of arrival**. If multiple tips come in while a vib
 
 The **⏸ Pause** button suspends queue processing without losing queued tips. Click **▶ Resume** to restart processing from the front of the queue. The number of pending tips is shown in real time.
 
+### Per-row test buttons
+
+Every row in both the **Special Commands** and **Standard Mapping** tables has a **▶** button on the right. Clicking it sends the exact command for that row to your device so you can verify each configuration without waiting for a real tip.
+
+- Only one test can run at a time — all **▶** buttons are disabled while a test is active
+- A red **⏹ Stop current test** button appears above the connection test button while a test is running, letting you interrupt it immediately
+- The test uses the real configured duration (no cap)
+
 ### Live display
 
 The popup shows the currently active tip with:
