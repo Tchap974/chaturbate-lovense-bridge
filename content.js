@@ -1,38 +1,37 @@
 // content.js — Runs on Chaturbate pages
-// Observes the chat, detects tips, manages the queue and pause state
+// Detects tips and writes them to storage. The service worker reads from storage.
+// This avoids the unreliable sendMessage MV3 pattern where callbacks may never fire.
 
 (function () {
   const TIP_REGEX = /tipped\s+(\d+)\s+tokens?/i;
 
-  let tipQueue = [];
-  let isProcessing = false;
-  let isPaused = false;
+  // Keep-alive ping every 20s to prevent the service worker from sleeping
+  setInterval(() => {
+    chrome.runtime.sendMessage({ type: 'PING' }, () => { void chrome.runtime.lastError; });
+  }, 20000);
 
   // Sync pause state from storage on startup
-  chrome.storage.local.get(['paused'], (result) => {
-    isPaused = !!result.paused;
-  });
+  let isPaused = false;
+  chrome.storage.local.get(['paused'], (result) => { isPaused = !!result.paused; });
 
   // Listen for pause state changes sent from popup.js
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'PAUSE_STATE') {
       isPaused = message.paused;
-      console.log(`[Lovense Bridge] ${isPaused ? '⏸ Paused' : '▶ Resumed — processing queue'}`);
-      syncQueueLength();
-      if (!isPaused && !isProcessing) {
-        processQueue();
+      console.log(`[Lovense Bridge] ${isPaused ? '⏸ Paused' : '▶ Resumed'}`);
+      if (!isPaused) {
+        // Notify background that pause was lifted so it can resume processing
+        chrome.storage.local.get(['tipQueue'], (r) => {
+          if ((r.tipQueue || []).length > 0) {
+            chrome.runtime.sendMessage({ type: 'RESUME' }, () => { void chrome.runtime.lastError; });
+          }
+        });
       }
     }
   });
 
-  // Write queue length to storage so the popup can display it
-  function syncQueueLength() {
-    chrome.storage.local.set({ queueLength: tipQueue.length });
-  }
-
   // Find the chat container in the DOM
   function findChatContainer() {
-    // Confirmed via browser inspector: single div with both classes
     return document.querySelector('div.msg-list-fvm.message-list');
   }
 
@@ -43,43 +42,19 @@
     return match ? parseInt(match[1], 10) : null;
   }
 
-  // Add a tip to the queue and start processing if idle
-  function enqueueTip(tokens) {
-    tipQueue.push(tokens);
-    syncQueueLength();
-    console.log(`[Lovense Bridge] Tip detected: ${tokens} tokens. Queue: ${tipQueue.length}${isPaused ? ' (paused)' : ''}`);
-    if (!isProcessing && !isPaused) {
-      processQueue();
-    }
-  }
-
-  // Process the queue one tip at a time
-  function processQueue() {
-    // Do nothing while paused
-    if (isPaused) {
-      isProcessing = false;
-      return;
-    }
-
-    if (tipQueue.length === 0) {
-      isProcessing = false;
-      syncQueueLength();
-      return;
-    }
-
-    isProcessing = true;
-    const tokens = tipQueue.shift();
-    syncQueueLength();
-
-    // Send tip to the service worker (background.js)
-    chrome.runtime.sendMessage({ type: 'TIP', tokens }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.warn('[Lovense Bridge] Messaging error:', chrome.runtime.lastError.message);
-      }
-
-      // Wait for the vibration to finish before processing the next tip
-      const delay = (response && response.duration) ? response.duration : 3000;
-      setTimeout(processQueue, delay);
+  // Push tips into the shared queue in storage
+  // background.js owns processing — content.js only writes
+  function pushTipsToQueue(tokens) {
+    chrome.storage.local.get(['tipQueue'], (result) => {
+      const queue = result.tipQueue || [];
+      queue.push(tokens);
+      chrome.storage.local.set({ tipQueue: queue, queueLength: queue.length }, () => {
+        console.log(`[Lovense Bridge] Tip queued: ${tokens} tokens. Queue: ${queue.length}${isPaused ? ' (paused)' : ''}`);
+        // Notify background a new tip arrived (only if not paused)
+        if (!isPaused) {
+          chrome.runtime.sendMessage({ type: 'TIP_QUEUED' }, () => { void chrome.runtime.lastError; });
+        }
+      });
     });
   }
 
@@ -88,18 +63,12 @@
     console.log('[Lovense Bridge] Chat observation started ✓');
 
     const observer = new MutationObserver((mutations) => {
-      // Collect all tip nodes found across this batch of mutations
-      // then sort them by data-ts (oldest first) before enqueuing.
-      // This ensures that historical tips inserted in reverse order
-      // (Chaturbate prepends past messages when entering a room)
-      // are processed oldest-first, matching their original order.
       const collected = [];
 
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
-          // Single chat message node
           if (node.dataset?.testid === 'chat-message') {
             const tipEl = node.querySelector('.roomNotice.isTip');
             if (tipEl) {
@@ -112,7 +81,6 @@
             continue;
           }
 
-          // Batch insert — check all descendants
           const msgNodes = node.querySelectorAll('[data-testid="chat-message"]');
           for (const msgNode of msgNodes) {
             const tipEl = msgNode.querySelector('.roomNotice.isTip');
@@ -129,29 +97,37 @@
 
       if (collected.length === 0) return;
 
-      // Sort oldest first (ascending timestamp)
+      // Sort oldest first before queuing
       collected.sort((a, b) => a.ts - b.ts);
 
-      for (const { tokens } of collected) {
-        enqueueTip(tokens);
-      }
+      // Push each tip sequentially into storage
+      // We chain storage reads/writes to avoid race conditions
+      const pushSequentially = (items) => {
+        if (items.length === 0) return;
+        chrome.storage.local.get(['tipQueue'], (result) => {
+          const queue = result.tipQueue || [];
+          for (const { tokens } of items) queue.push(tokens);
+          chrome.storage.local.set({ tipQueue: queue, queueLength: queue.length }, () => {
+            console.log(`[Lovense Bridge] ${items.length} tip(s) queued. Queue: ${queue.length}`);
+            if (!isPaused) {
+              chrome.runtime.sendMessage({ type: 'TIP_QUEUED' }, () => { void chrome.runtime.lastError; });
+            }
+          });
+        });
+      };
+
+      pushSequentially(collected);
     });
 
     observer.observe(container, { childList: true, subtree: true });
   }
 
   // Wait for the chat container to appear in the DOM
-  // Uses a MutationObserver on body — more reliable than setTimeout retries
-  // since the script injects before the chat is rendered
   function waitForChat() {
     const existing = findChatContainer();
-    if (existing) {
-      startObserver(existing);
-      return;
-    }
+    if (existing) { startObserver(existing); return; }
 
     console.log('[Lovense Bridge] Container not found, watching body...');
-
     const bodyObserver = new MutationObserver(() => {
       const container = findChatContainer();
       if (container) {
@@ -160,7 +136,6 @@
         startObserver(container);
       }
     });
-
     bodyObserver.observe(document.body, { childList: true, subtree: true });
   }
 

@@ -75,9 +75,14 @@ document.getElementById('btnPause').addEventListener('click', () => {
     const newPaused = !r.paused;
     chrome.storage.local.set({ paused: newPaused }, () => {
       updatePauseButton(newPaused, r.queueLength || 0);
+      // Notify content script of pause state change
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { type: 'PAUSE_STATE', paused: newPaused });
+        if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { type: 'PAUSE_STATE', paused: newPaused }, () => { void chrome.runtime.lastError; });
       });
+      // If resuming, tell background to start processing
+      if (!newPaused) {
+        chrome.runtime.sendMessage({ type: 'RESUME' }, () => { void chrome.runtime.lastError; });
+      }
     });
   });
 });
@@ -125,6 +130,7 @@ function renderSpecial(list) {
         </div>
       </td>
       <td><button class="btn-remove" data-index="${index}">✕</button></td>
+      <td><button class="btn-test-row" data-index="${index}" data-type="special">▶</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -134,6 +140,18 @@ function renderSpecial(list) {
       const current = readSpecialFromDOM();
       current.splice(parseInt(btn.dataset.index), 1);
       renderSpecial(current);
+    });
+  });
+
+  tbody.querySelectorAll('.btn-test-row[data-type="special"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const list = readSpecialFromDOM();
+      const s = list[parseInt(btn.dataset.index)];
+      const strength = s.strengthMax;
+      const duration = s.randomDuration
+        ? Math.floor(Math.random() * (s.durationMax - s.durationMin + 1)) + s.durationMin
+        : s.durationMin;
+      testVibration({ pattern: s.pattern, strength, duration });
     });
   });
 }
@@ -174,6 +192,7 @@ function renderMapping(mapping) {
       <td><input type="number" min="1" max="20" value="${rule.strength}" /></td>
       <td><input type="number" min="1" max="600" value="${rule.duration}" /></td>
       <td><button class="btn-remove" data-index="${index}">✕</button></td>
+      <td><button class="btn-test-row" data-index="${index}" data-type="mapping">▶</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -182,6 +201,14 @@ function renderMapping(mapping) {
       const current = readMappingFromDOM();
       current.splice(parseInt(btn.dataset.index), 1);
       renderMapping(current);
+    });
+  });
+
+  tbody.querySelectorAll('.btn-test-row[data-type="mapping"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mapping = readMappingFromDOM();
+      const r = mapping[parseInt(btn.dataset.index)];
+      testVibration({ pattern: 'Vibrate', strength: r.strength, duration: r.duration });
     });
   });
 }
@@ -203,6 +230,74 @@ document.getElementById('btnAddRow').addEventListener('click', () => {
   current.push({ minTokens: 1, maxTokens: 9, strength: 10, duration: 5 });
   renderMapping(current);
 });
+
+// --- Test a specific vibration row ---
+
+const PRESET_PATTERNS_POPUP = ['Pulse', 'Wave', 'Fireworks', 'Earthquake'];
+let testActive = false;      // true while a test is running
+let testTimer = null;        // setTimeout handle for auto-reset
+
+function setAllTestButtons(disabled) {
+  document.querySelectorAll('.btn-test-row').forEach(b => b.disabled = disabled);
+  const stopBtn = document.getElementById('btnStopTest');
+  if (stopBtn) stopBtn.classList.toggle('visible', disabled);
+}
+
+function stopTest(ip, port) {
+  if (testTimer) { clearTimeout(testTimer); testTimer = null; }
+  testActive = false;
+  setAllTestButtons(false);
+  const url = `http://${ip}:${port}/command`;
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: "Function", action: "Vibrate:0,Rotate:0", timeSec: 0, toy: "", apiVer: 1 }) })
+    .catch(() => {});
+  showStatus('⏹ Test stopped');
+}
+
+function testVibration({ pattern, strength, duration }) {
+  const ip = document.getElementById('lovenseIP').value.trim();
+  const port = document.getElementById('lovensePort').value.trim();
+  if (!ip || !port) { showStatus('⚠️ Please enter IP and Port first', true); return; }
+  if (testActive) { showStatus('⚠️ A test is already running — stop it first', true); return; }
+
+  const url = `http://${ip}:${port}/command`;
+  const durationSec = duration;
+  const postJSON = (body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+
+  testActive = true;
+  setAllTestButtons(true);
+  showStatus(`▶ Testing: ${pattern} strength ${strength} for ${durationSec}s…`);
+
+  const onDone = () => {
+    testActive = false;
+    setAllTestButtons(false);
+    testTimer = null;
+    showStatus(`✅ Test finished: ${pattern}`);
+  };
+
+  const onError = (err) => {
+    testActive = false;
+    setAllTestButtons(false);
+    testTimer = null;
+    showStatus(`❌ ${err.message}`, true);
+  };
+
+  let promise;
+  if (PRESET_PATTERNS_POPUP.includes(pattern)) {
+    promise = postJSON({ command: "Function", action: `Rotate:${strength}`, timeSec: durationSec, toy: "", apiVer: 1 })
+      .then(() => new Promise(resolve => setTimeout(resolve, 100)))
+      .then(() => postJSON({ command: "Preset", name: pattern.toLowerCase(), timeSec: durationSec, toy: "", apiVer: 1 }));
+  } else {
+    promise = postJSON({ command: "Function", action: `Vibrate:${strength},Rotate:${strength}`, timeSec: durationSec, toy: "", apiVer: 1 });
+  }
+
+  promise
+    .then(() => { testTimer = setTimeout(onDone, durationSec * 1000); })
+    .catch(onError);
+
+  // Expose stop function for the Stop button
+  document._currentTestStop = () => stopTest(ip, port);
+}
 
 // --- Load config from storage ---
 
@@ -263,6 +358,11 @@ document.getElementById('btnTest').addEventListener('click', () => {
     .then(r => r.json())
     .then(data => showStatus(data.result === true || data.code === 200 ? '✅ Connection OK!' : `⚠️ ${JSON.stringify(data)}`, !(data.result || data.code === 200)))
     .catch(err => showStatus(`❌ ${err.message}`, true));
+});
+
+// --- Stop test button ---
+document.getElementById('btnStopTest').addEventListener('click', () => {
+  if (document._currentTestStop) document._currentTestStop();
 });
 
 // --- Status helper ---

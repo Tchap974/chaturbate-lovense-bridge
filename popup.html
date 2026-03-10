@@ -64,6 +64,11 @@
     button:hover { opacity: 0.85; }
     .btn-add { background: #0f3460; color: #a0c4ff; border: 1px solid #2a4a7f; }
     .btn-remove { background: transparent; color: #ff6b9d; border: 1px solid #ff6b9d; padding: 3px 7px; font-size: 11px; }
+    .btn-test-row { background: transparent; color: #4caf50; border: 1px solid #4caf50; padding: 3px 7px; font-size: 11px; border-radius: 4px; cursor: pointer; }
+    .btn-test-row:hover { background: #4caf5022; }
+    .btn-test-row:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-stop-test { width: 100%; background: #c0392b; color: #fff; font-weight: 700; font-size: 12px; padding: 7px; border-radius: 6px; margin-bottom: 8px; display: none; }
+    .btn-stop-test.visible { display: block; }
     .btn-save { width: 100%; background: #ff6b9d; color: #fff; font-weight: 700; font-size: 13px; padding: 9px; border-radius: 6px; margin-top: 4px; }
     .btn-test { width: 100%; background: #0f3460; color: #a0c4ff; border: 1px solid #2a4a7f; font-size: 12px; padding: 7px; border-radius: 6px; margin-bottom: 8px; }
     .btn-pause { width: 100%; font-size: 14px; font-weight: 700; padding: 10px; border-radius: 6px; margin-bottom: 10px; background: #e67e22; color: #fff; border: none; }
@@ -121,6 +126,7 @@
     <div class="tip-info">💡 Find this info in Lovense Remote → Discover → Game Mode</div>
   </div>
 
+  <button class="btn-stop-test" id="btnStopTest">⏹ Stop current test</button>
   <button class="btn-test" id="btnTest">⚡ Test connection (2s vibration)</button>
 
   <!-- Commandes spéciales -->
@@ -134,6 +140,7 @@
           <th>Strength</th>
           <th>Duration (s)</th>
           <th>Rand.</th>
+          <th></th>
           <th></th>
         </tr>
       </thead>
@@ -155,6 +162,7 @@
           <th>Max</th>
           <th>Strength</th>
           <th>Duration (s)</th>
+          <th></th>
           <th></th>
         </tr>
       </thead>
